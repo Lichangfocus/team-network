@@ -1,0 +1,61 @@
+:root {
+  --bg: #f6f7f9; --card: #fff; --ink: #1c2430; --muted: #6b7686;
+  --line: #e4e8ee; --accent: #2563eb; --accent-ink: #fff; --danger: #dc2626;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #10141a; --card: #181e27; --ink: #e6ebf2; --muted: #8b96a5;
+          --line: #2a3340; --accent: #4c8dff; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 15px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+       background: var(--bg); color: var(--ink); }
+#topbar { display: flex; justify-content: space-between; align-items: center;
+          padding: 12px 24px; background: var(--card); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 700; text-decoration: none; color: var(--ink); font-size: 17px; }
+#userbox { color: var(--muted); font-size: 13px; display: flex; gap: 12px; align-items: center; }
+main { max-width: 880px; margin: 24px auto; padding: 0 16px; }
+
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+        padding: 20px; margin-bottom: 16px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+.sub { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+input, textarea { width: 100%; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px;
+        background: var(--bg); color: var(--ink); font: inherit; margin-bottom: 10px; }
+textarea { font-family: var(--mono); font-size: 13px; min-height: 300px; }
+button { padding: 8px 16px; border: none; border-radius: 8px; background: var(--accent);
+         color: var(--accent-ink); font: inherit; font-weight: 600; cursor: pointer; }
+button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+button.sm { padding: 4px 10px; font-size: 13px; font-weight: 500; }
+.row { display: flex; gap: 10px; align-items: center; }
+.row input { margin-bottom: 0; }
+
+.list-item { display: flex; justify-content: space-between; align-items: center;
+             padding: 12px 4px; border-bottom: 1px solid var(--line); }
+.list-item:last-child { border-bottom: none; }
+.meta { color: var(--muted); font-size: 13px; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 20px; font-size: 12px;
+         background: var(--bg); border: 1px solid var(--line); color: var(--muted); }
+.badge.decision { color: #b45309; } .badge.fact { color: #047857; }
+.badge.question { color: #be185d; } .badge.task-log { color: #6d28d9; }
+
+code, pre { font-family: var(--mono); font-size: 13px; }
+pre, .cmd { background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+      padding: 10px 12px; overflow-x: auto; }
+.cmd { user-select: all; }
+.err { color: var(--danger); font-size: 13px; margin: 8px 0; }
+.ok { color: #047857; font-size: 13px; margin: 8px 0; }
+
+.entity-body h1, .entity-body h2, .entity-body h3 { font-size: 17px; margin: 16px 0 8px; }
+.entity-body p { margin: 8px 0; }
+.entity-body .wikilink { border-bottom: 1px dashed var(--accent); }
+.fm-table { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+.fm-table td { padding: 1px 12px 1px 0; }
+.center { max-width: 400px; margin: 60px auto; }
+.tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.tabs button { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.tabs button.active { color: var(--accent); border-color: var(--accent); }

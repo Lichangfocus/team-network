@@ -1,0 +1,12 @@
+# Render 一键部署：Dashboard → New → Blueprint → 选本仓库
+# 注意：free plan 不支持持久盘（重部署会丢 SQLite 数据）；starter 及以上有 /data 盘
+services:
+  - type: web
+    name: team-network
+    runtime: docker
+    rootDir: server
+    dockerfilePath: ./Dockerfile
+    disk:
+      name: tn-data
+      mountPath: /data
+      sizeGB: 1

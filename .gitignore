@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+server/.venv/
+server/data/
+.team-network/
+.DS_Store
