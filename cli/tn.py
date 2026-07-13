@@ -7,6 +7,7 @@
   git  — 一个共享 git 仓库（无服务器的降级方案）
 
 命令:
+  tn connect <url>/s/<id> --token TOK  一条命令完成登录+绑定（网页空间页可复制）
   tn login <server> [--token TOK]      登录云端服务（token 可在网页后台生成）
   tn init <目标>                        绑定当前 workspace 到共享空间
                                         目标 = http(s)://server/s/<空间id>（网页空间页可复制）
@@ -306,6 +307,22 @@ def cmd_init(args):
         init_api(m.group(1), int(m.group(2)))
     else:
         init_git(args.target, args.name)
+
+
+def cmd_connect(args):
+    """一条命令完成 登录 + 绑定 + 首次同步（token 来自网页空间页的「接入命令」）。"""
+    m = re.match(r"^(https?://[^/]+)/s/(\d+)$", args.target.rstrip("/"))
+    if not m:
+        die("目标格式应为 http(s)://服务器/s/<空间id>（网页空间页可复制完整接入命令）")
+    server, sid = m.group(1), int(m.group(2))
+    status, me = http("GET", server + "/api/me", args.token)
+    if status != 200:
+        die("token 无效或已失效，回到网页空间页重新生成接入命令")
+    creds = load_creds()
+    creds[server] = {"token": args.token, "email": me["email"]}
+    save_creds(creds)
+    print(f"✓ 已登录 {server}（{me['email']}）")
+    init_api(server, sid)
 
 
 def write_ws_config(cfg):
@@ -670,6 +687,11 @@ def main():
     p.add_argument("server", help="服务器地址，如 https://tn.example.com")
     p.add_argument("--token", help="直接使用网页后台生成的 CLI token（免输密码）")
     p.set_defaults(func=cmd_login)
+
+    p = sub.add_parser("connect", help="一条命令完成登录+绑定（网页空间页可复制完整命令）")
+    p.add_argument("target", help="http(s)://服务器/s/<空间id>")
+    p.add_argument("--token", required=True, help="网页空间页生成的接入 token")
+    p.set_defaults(func=cmd_connect)
 
     p = sub.add_parser("init", help="绑定当前 workspace 到共享空间")
     p.add_argument("target", help="http(s)://服务器/s/<空间id> 或 git 远端地址")

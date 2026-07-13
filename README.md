@@ -35,18 +35,19 @@ npx -y localtunnel --port 8787        # 得到 https://xxx.loca.lt 公网地址
 # CLI 直接用；浏览器首次访问需输入隧道密码（curl https://loca.lt/mytunnelpassword 查看）
 ```
 
-**2. 网页后台初始化**：打开服务地址 → 注册 → 创建 team → 「生成邀请码」发给同事（同事注册后输码加入）→ 创建共享空间 → 复制空间页上的绑定命令。
+**2. 网页后台初始化**：打开服务地址 → 注册 → 创建 team → 「生成邀请码」发给同事（同事注册后输码加入）→ 创建共享空间。
 
-**3. 每个成员在自己的机器上**：
+**3. 每个成员两条命令接入**（服务本身就是发行渠道，无需 clone 本仓库）：
 
 ```bash
-./install.sh                          # 装 tn CLI + skill
-tn login http://server:8787           # 输邮箱密码；或网页后台生成 CLI token 后 --token 传入
-cd ~/work/my-project
-tn init http://server:8787/s/1        # 绑定 workspace 到共享空间（空间页可复制此命令）
+# ① 每台电脑装一次（装好 tn CLI + agent skill）
+curl -fsSL http://server:8787/install.sh | bash
+
+# ② 网页空间页点「生成我的接入命令」，把它扔给 agent（或在项目目录执行）
+tn connect http://server:8787/s/1 --token <你的token>
 ```
 
-之后加载了 team-network skill 的 agent 会自动：**任务开始** → `tn pull` + `tn search <关键词>` 读背景实体；**任务结束** → 把本次产生的决策/事实/坑写成实体 → `tn push` 回流。
+绑定完成后，这个 workspace 里的 agent 会自动：**任务开始** → `tn pull` + `tn search <关键词>` 读背景实体（下行）；**任务结束** → 把本次产生的决策/事实/坑写成实体 → `tn push` 回流（上行）。
 
 ## 实体模型
 

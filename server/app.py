@@ -523,6 +523,62 @@ async def search(sid: int, request: Request, q: str = "", limit: int = 10):
     return {"results": results[:limit]}
 
 
+# ---------- 一键安装分发（服务自己就是发行渠道）----------
+
+REPO_ROOT = BASE.parent
+
+
+def origin_of(request: Request):
+    proto = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.headers.get("host", request.url.netloc))
+    return f"{proto}://{host}"
+
+
+@app.get("/install.sh")
+async def install_sh(request: Request):
+    """curl -fsSL <server>/install.sh | bash — 一条命令装好 tn CLI + skill"""
+    from fastapi.responses import PlainTextResponse
+    o = origin_of(request)
+    script = f"""#!/bin/bash
+# Team Network 一键安装（来自 {o}）
+set -euo pipefail
+SERVER="{o}"
+BIN="$HOME/.local/bin"
+SKILL="$HOME/.claude/skills/team-network"
+mkdir -p "$BIN" "$SKILL"
+curl -fsSL --retry 3 --retry-all-errors -m 60 "$SERVER/cli/tn.py" -o "$BIN/tn"
+chmod +x "$BIN/tn"
+curl -fsSL --retry 3 --retry-all-errors -m 60 "$SERVER/skill/SKILL.md" -o "$SKILL/SKILL.md"
+echo "✓ tn CLI      -> $BIN/tn"
+echo "✓ agent skill -> $SKILL/SKILL.md"
+case ":$PATH:" in
+  *":$BIN:"*) ;;
+  *) echo "⚠ $BIN 不在 PATH，请在 ~/.zshrc 加入: export PATH=\\"\\$HOME/.local/bin:\\$PATH\\"" ;;
+esac
+echo
+echo "下一步：打开 $SERVER 注册并加入/创建 team，在共享空间页复制「接入命令」发给你的 agent 即可。"
+"""
+    return PlainTextResponse(script, media_type="text/x-shellscript")
+
+
+@app.get("/cli/tn.py")
+async def dist_cli():
+    from fastapi.responses import FileResponse
+    p = REPO_ROOT / "cli" / "tn.py"
+    if not p.is_file():
+        err(404, "CLI 文件缺失")
+    return FileResponse(p, media_type="text/x-python")
+
+
+@app.get("/skill/SKILL.md")
+async def dist_skill():
+    from fastapi.responses import FileResponse
+    p = REPO_ROOT / "skill" / "team-network" / "SKILL.md"
+    if not p.is_file():
+        err(404, "skill 文件缺失")
+    return FileResponse(p, media_type="text/markdown")
+
+
 # ---------- 静态页面（网页后台）----------
 
 @app.get("/s/{sid}")

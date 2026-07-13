@@ -198,13 +198,20 @@ async function pageSpace(sid, entityName) {
   const ents = data.entities.filter((e) => !e.deleted)
     .map((e) => ({ ...e, fm: parseFrontmatter(e.content)[0] }))
     .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
-  const bindCmd = `tn init ${location.origin}/s/${sid}`;
   app.innerHTML = `
     <p><a href="#/team/${sp.team_id}">← ${esc(sp.team_name)}</a></p>
     <div class="card">
       <h1>${esc(sp.name)}</h1>
-      <p class="sub">${ents.length} 实体 · rev ${sp.rev} · 在 workspace 里绑定：</p>
-      <div class="cmd"><code>${esc(bindCmd)}</code></div>
+      <p class="sub">${ents.length} 实体 · rev ${sp.rev}</p>
+      <h2>接入（两步）</h2>
+      <p class="sub">1. 每台电脑装一次（终端执行）：</p>
+      <div class="cmd"><code>curl -fsSL ${esc(location.origin)}/install.sh | bash</code></div>
+      <p class="sub" style="margin-top:10px">2. 在要共享上下文的项目目录里，把接入命令直接发给你的 agent（或终端执行）：</p>
+      <div class="row">
+        <button id="gen-connect" class="sm">生成我的接入命令</button>
+        <span class="meta">命令含个人 token，别发给他人</span>
+      </div>
+      <div id="connect-out" style="margin-top:8px"></div>
     </div>
     <div class="card">
       <div class="row" style="margin-bottom:12px">
@@ -212,6 +219,12 @@ async function pageSpace(sid, entityName) {
       </div>
       <div id="ent-list">${entListHtml(ents, sid)}</div>
     </div>`;
+  $("#gen-connect").onclick = async () => {
+    const r = await API.post("/api/cli-token");
+    const cmd = `tn connect ${location.origin}/s/${sid} --token ${r.token}`;
+    $("#connect-out").innerHTML = `<div class="cmd"><code>${esc(cmd)}</code></div>
+      <p class="meta">点选即全选，复制后发给 agent。绑定完成后，该目录下的 agent 会自动在任务前拉取、任务后回流团队上下文。</p>`;
+  };
   const doSearch = async () => {
     const q = $("#q").value.trim();
     if (!q) { $("#ent-list").innerHTML = entListHtml(ents, sid); return; }

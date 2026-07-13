@@ -4,7 +4,6 @@ services:
   - type: web
     name: team-network
     runtime: docker
-    rootDir: server
     dockerfilePath: ./Dockerfile
     disk:
       name: tn-data

@@ -7,7 +7,9 @@ description: 团队共享上下文空间。当 workspace 存在 .team-network/co
 
 本 workspace 绑定了一个团队共享空间：一个 wiki 化的实体库，团队每个成员的 agent 都在持续读写它。你的职责是**任务开始前借用团队已有的上下文，任务结束后把新产生的上下文还回去**。
 
-前置条件：workspace 根目录存在 `.team-network/config.json`。若不存在，本 skill 不生效；用户想启用时运行 `tn init <目标>`（目标 = 网页后台空间页上的 `http(s)://服务器/s/<id>` 链接，或一个 git 远端地址）。
+前置条件：workspace 根目录存在 `.team-network/config.json`。若不存在，本 skill 不生效。
+
+**绑定流程**：用户会扔给你一条形如 `tn connect http(s)://服务器/s/<id> --token <token>` 的接入命令（来自网页后台空间页）——直接在 workspace 根目录执行它即可完成登录+绑定+首次同步。没有接入命令时，让用户去网页空间页点「生成我的接入命令」，或运行 `tn init <目标>` + `tn login`（git 远端地址也可作为目标）。
 
 CLI 是 `tn`（若未安装，用 `python3 <项目路径>/cli/tn.py` 等价调用）。
 
