@@ -25,6 +25,16 @@ server/Dockerfile       # 容器部署（数据库在 /data volume）
 # 或 docker build -t team-network server/ && docker run -p 8787:8787 -v tn-data:/data team-network
 ```
 
+永久托管：仓库根目录有 `render.yaml`，Render Dashboard → New → Blueprint → 选本仓库即可（free plan 重部署丢数据，starter 有持久盘）。
+
+临时公网试用（不买服务器，先给同事玩一下）：
+
+```bash
+./run-server.sh &
+npx -y localtunnel --port 8787        # 得到 https://xxx.loca.lt 公网地址
+# CLI 直接用；浏览器首次访问需输入隧道密码（curl https://loca.lt/mytunnelpassword 查看）
+```
+
 **2. 网页后台初始化**：打开服务地址 → 注册 → 创建 team → 「生成邀请码」发给同事（同事注册后输码加入）→ 创建共享空间 → 复制空间页上的绑定命令。
 
 **3. 每个成员在自己的机器上**：
