@@ -16,38 +16,36 @@ run-server.sh           # 本地/服务器启动（自动建 venv）
 server/Dockerfile       # 容器部署（数据库在 /data volume）
 ```
 
-## 快速开始
+## 使用（主推：中心化托管服务，用户零运维）
 
-**1. 部署云端服务**（团队一人做一次）
-
-```bash
-./run-server.sh                       # 默认 http://0.0.0.0:8787，TN_PORT 可改
-# 或 docker build -t team-network server/ && docker run -p 8787:8787 -v tn-data:/data team-network
-```
-
-永久托管：仓库根目录有 `render.yaml`，Render Dashboard → New → Blueprint → 选本仓库即可（free plan 重部署丢数据，starter 有持久盘）。
-
-临时公网试用（不买服务器，先给同事玩一下）：
+服务是多租户的：我们运维**一个**服务，所有 team 注册即用，永远不碰服务器。以官方域名 `https://tn.example.com` 为例（部署见 [docs/OPS.md](docs/OPS.md)），用户的完整旅程只有三步：
 
 ```bash
-./run-server.sh &
-npx -y localtunnel --port 8787        # 得到 https://xxx.loca.lt 公网地址
-# CLI 直接用；浏览器首次访问需输入隧道密码（curl https://loca.lt/mytunnelpassword 查看）
+# ① 每台电脑装一次：装好 tn CLI + agent skill（服务本身就是发行渠道）
+curl -fsSL https://tn.example.com/install.sh | bash
 ```
 
-**2. 网页后台初始化**：打开服务地址 → 注册 → 创建 team → 「生成邀请码」发给同事（同事注册后输码加入）→ 创建共享空间。
-
-**3. 每个成员两条命令接入**（服务本身就是发行渠道，无需 clone 本仓库）：
+**② 网页上完成组织关系**：打开 `https://tn.example.com` 注册 → 建 team → 页面生成**邀请链接**发给同事（同事点开即引导注册并自动入团）→ 建共享空间。
 
 ```bash
-# ① 每台电脑装一次（装好 tn CLI + agent skill）
-curl -fsSL http://server:8787/install.sh | bash
-
-# ② 网页空间页点「生成我的接入命令」，把它扔给 agent（或在项目目录执行）
-tn connect http://server:8787/s/1 --token <你的token>
+# ③ 空间页点「生成我的接入命令」，把命令直接扔给 agent（在项目目录下）
+tn connect https://tn.example.com/s/1 --token <你的token>
 ```
 
-绑定完成后，这个 workspace 里的 agent 会自动：**任务开始** → `tn pull` + `tn search <关键词>` 读背景实体（下行）；**任务结束** → 把本次产生的决策/事实/坑写成实体 → `tn push` 回流（上行）。
+绑定完成后，这个 workspace 里的 agent 全自动：**任务开始** → `tn pull` + `tn search <关键词>` 读团队背景（下行）；**任务结束** → 把本次产生的决策/事实/坑写成实体 `tn push` 回流（上行）。
+
+已内置公开服务所需的防护：接口限流、实体/空间/team 配额、密码 PBKDF2 存储、token 哈希化。运维侧（服务器选型、域名 HTTPS、备份、监控、扩容路径）见 [docs/OPS.md](docs/OPS.md)。
+
+## 自托管（可选）
+
+不想用托管服务的团队可以自己跑同一份代码：
+
+```bash
+./run-server.sh                       # 本机起服务（自动建 venv）
+# 或 docker build -t team-network . && docker run -p 8787:8787 -v tn-data:/data team-network
+# 或 Render/Fly：仓库自带 render.yaml / fly.toml
+# 临时公网试用：npx -y localtunnel --port 8787
+```
 
 ## 实体模型
 

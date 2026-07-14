@@ -83,12 +83,21 @@ function setUserbox(user) {
 // ---------- 页面 ----------
 async function pageLogin() {
   setUserbox(null);
-  let mode = "login";
+  let mode = localStorage.getItem("tn_pending_invite") ? "register" : "login";
+  let inviteBanner = "";
+  const pending = localStorage.getItem("tn_pending_invite");
+  if (pending) {
+    try {
+      const inv = await API.get(`/api/invites/${pending}`);
+      inviteBanner = `<p class="ok">受邀加入 team「${esc(inv.team_name)}」——注册或登录后自动加入。</p>`;
+    } catch { localStorage.removeItem("tn_pending_invite"); }
+  }
   const render = () => {
     app.innerHTML = `
     <div class="card center">
       <h1>${mode === "login" ? "登录" : "注册"}</h1>
       <p class="sub">Team Network — 团队共享上下文空间</p>
+      ${inviteBanner}
       ${mode === "register" ? `<input id="f-name" placeholder="名字">` : ""}
       <input id="f-email" type="email" placeholder="邮箱">
       <input id="f-pw" type="password" placeholder="密码（至少 8 位）">
@@ -106,6 +115,15 @@ async function pageLogin() {
         const r = await API.post(`/api/${mode}`, payload);
         API.token = r.token;
         localStorage.setItem("tn_token", r.token);
+        const code = localStorage.getItem("tn_pending_invite");
+        if (code) {
+          localStorage.removeItem("tn_pending_invite");
+          try {
+            const j = await API.post(`/api/invites/${code}/accept`);
+            location.hash = `#/team/${j.team_id}`;
+            return;
+          } catch {}
+        }
         location.hash = "#/teams";
       } catch (e) { $("#f-err").textContent = e.message; }
     };
@@ -185,7 +203,8 @@ async function pageTeam(tid) {
   };
   $("#inv-create").onclick = async () => {
     const r = await API.post(`/api/teams/${tid}/invites`);
-    $("#inv-out").innerHTML = `邀请码：<code>${r.code}</code>（可用 20 次，对方在「我的 Team」页输入即可加入）`;
+    const url = `${location.origin}/join/${r.code}`;
+    $("#inv-out").innerHTML = `邀请链接（可用 20 次，直接发给同事）：<br><span class="cmd"><code>${esc(url)}</code></span>`;
   };
 }
 
@@ -292,9 +311,22 @@ async function pageEntity(sp, name) {
 // ---------- 路由 ----------
 async function route() {
   const hash = location.hash || "#/teams";
+  let m;
+  if ((m = hash.match(/^#\/join\/([\w-]+)$/))) {
+    localStorage.setItem("tn_pending_invite", m[1]);
+    if (!API.token) { location.hash = "#/login"; return; }
+    const code = m[1];
+    localStorage.removeItem("tn_pending_invite");
+    try {
+      const j = await API.post(`/api/invites/${code}/accept`);
+      location.hash = `#/team/${j.team_id}`;
+    } catch (e) {
+      app.innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
+    }
+    return;
+  }
   if (!API.token && hash !== "#/login") { location.hash = "#/login"; return; }
   try {
-    let m;
     if (hash === "#/login") return pageLogin();
     if (hash === "#/teams") return await pageTeams();
     if ((m = hash.match(/^#\/team\/(\d+)$/))) return await pageTeam(m[1]);

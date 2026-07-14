@@ -118,6 +118,47 @@ def err(code, msg):
 app = FastAPI(title="Team Network", docs_url=None, redoc_url=None)
 
 
+# ---------- 公开服务防护（单实例内存限流 + 配额）----------
+
+MAX_CONTENT_BYTES = 100_000       # 单实体上限
+MAX_ENTITIES_PER_SPACE = 5_000
+MAX_TEAMS_PER_USER = 50
+MAX_SPACES_PER_TEAM = 20
+
+_rate_buckets = {}
+
+
+def client_ip(request: Request):
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "?"
+
+
+def rate_limit(request: Request, bucket: str, limit: int, window_sec: int):
+    """滑动窗口限流，按 IP。超限返回 429。"""
+    import time
+    key = (bucket, client_ip(request))
+    now = time.monotonic()
+    hits = [t for t in _rate_buckets.get(key, []) if now - t < window_sec]
+    if len(hits) >= limit:
+        err(429, "请求过于频繁，请稍后再试")
+    hits.append(now)
+    _rate_buckets[key] = hits
+    if len(_rate_buckets) > 10_000:          # 防内存膨胀
+        cutoff = now - window_sec
+        for k in list(_rate_buckets):
+            if not any(t > cutoff for t in _rate_buckets[k]):
+                del _rate_buckets[k]
+
+
+@app.get("/api/health")
+async def health():
+    with db() as conn:
+        conn.execute("SELECT 1").fetchone()
+    return {"ok": True}
+
+
 # ---------- 鉴权 / 权限 ----------
 
 def auth_user(conn, request: Request):
@@ -175,6 +216,7 @@ def user_json(u):
 
 @app.post("/api/register")
 async def register(request: Request):
+    rate_limit(request, "register", 20, 3600)
     d = await body(request)
     email = (d.get("email") or "").strip().lower()
     name = (d.get("name") or "").strip() or email.split("@")[0]
@@ -199,6 +241,7 @@ async def register(request: Request):
 
 @app.post("/api/login")
 async def login(request: Request):
+    rate_limit(request, "login", 30, 600)
     d = await body(request)
     email = (d.get("email") or "").strip().lower()
     kind = d.get("kind") or "web"
@@ -251,6 +294,9 @@ async def create_team(request: Request):
         err(400, "team 名称不能为空")
     with db() as conn:
         u = auth_user(conn, request)
+        n = conn.execute("SELECT COUNT(*) AS c FROM team_members WHERE user_id=?", (u["id"],)).fetchone()["c"]
+        if n >= MAX_TEAMS_PER_USER:
+            err(429, f"每个用户最多加入 {MAX_TEAMS_PER_USER} 个 team")
         cur = conn.execute(
             "INSERT INTO teams(name,created_by,created_at) VALUES(?,?,?)", (name, u["id"], now())
         )
@@ -298,8 +344,21 @@ async def create_invite(tid: int, request: Request):
     return {"code": code}
 
 
+@app.get("/api/invites/{code}")
+async def invite_preview(code: str, request: Request):
+    """邀请链接落地页用：预览要加入的 team。"""
+    rate_limit(request, "invite-preview", 60, 600)
+    with db() as conn:
+        inv = conn.execute("SELECT * FROM invites WHERE code=?", (code,)).fetchone()
+        if not inv or inv["uses_left"] <= 0:
+            err(404, "邀请码无效或已用完")
+        t = conn.execute("SELECT * FROM teams WHERE id=?", (inv["team_id"],)).fetchone()
+    return {"team_id": t["id"], "team_name": t["name"]}
+
+
 @app.post("/api/invites/{code}/accept")
 async def accept_invite(code: str, request: Request):
+    rate_limit(request, "invite-accept", 30, 3600)
     with db() as conn:
         u = auth_user(conn, request)
         inv = conn.execute("SELECT * FROM invites WHERE code=?", (code,)).fetchone()
@@ -329,6 +388,9 @@ async def create_space(tid: int, request: Request):
     with db() as conn:
         u = auth_user(conn, request)
         require_member(conn, u["id"], tid)
+        n = conn.execute("SELECT COUNT(*) AS c FROM spaces WHERE team_id=?", (tid,)).fetchone()["c"]
+        if n >= MAX_SPACES_PER_TEAM:
+            err(429, f"每个 team 最多 {MAX_SPACES_PER_TEAM} 个空间")
         try:
             cur = conn.execute(
                 "INSERT INTO spaces(team_id,name,created_at) VALUES(?,?,?)", (tid, name, now())
@@ -409,12 +471,18 @@ async def put_entity(sid: int, name: str, request: Request):
     base_version = int(d.get("base_version") or 0)
     if not isinstance(content, str) or not content.strip():
         err(400, "content 不能为空")
-    if not re.match(r"^[\w.-]+$", name):
-        err(400, "实体名只能包含字母数字、点、横线、下划线")
+    if len(content.encode()) > MAX_CONTENT_BYTES:
+        err(413, f"实体过大（上限 {MAX_CONTENT_BYTES // 1000}KB）——共享空间存知识卡片，不是文件")
+    if not re.match(r"^[\w.-]+$", name) or len(name) > 120:
+        err(400, "实体名只能包含字母数字、点、横线、下划线（≤120 字符）")
     with db() as conn:
         u = auth_user(conn, request)
         sp = get_space(conn, u["id"], sid)
         e = conn.execute("SELECT * FROM entities WHERE space_id=? AND name=?", (sid, name)).fetchone()
+        if e is None:
+            n = conn.execute("SELECT COUNT(*) AS c FROM entities WHERE space_id=?", (sid,)).fetchone()["c"]
+            if n >= MAX_ENTITIES_PER_SPACE:
+                err(429, f"空间实体数已达上限 {MAX_ENTITIES_PER_SPACE}，先做整理合并")
         current_version = 0 if (e is None or e["deleted"]) else e["version"]
         if base_version != current_version:
             return JSONResponse(status_code=409, content={
@@ -586,6 +654,13 @@ async def space_shortlink(sid: int):
     """tn init 绑定命令里的短链接，浏览器打开时跳到空间页。"""
     from fastapi.responses import RedirectResponse
     return RedirectResponse(f"/#/space/{sid}")
+
+
+@app.get("/join/{code}")
+async def join_shortlink(code: str):
+    """邀请链接：未登录会先引导注册/登录，然后自动加入 team。"""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(f"/#/join/{code}")
 
 
 app.mount("/", StaticFiles(directory=BASE / "static", html=True), name="static")

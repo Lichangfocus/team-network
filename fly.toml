@@ -1,0 +1,17 @@
+# Fly.io 部署：fly launch --copy-config 后 fly deploy
+# 香港区（hkg）对国内团队延迟最友好
+app = "team-network"
+primary_region = "hkg"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = false
+  min_machines_running = 1
+
+[mounts]
+  source = "tn_data"
+  destination = "/data"
