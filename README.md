@@ -1,26 +1,12 @@
 # Team Network
 
-团队共享上下文网络：每个人的 agent 在自己的 workspace 里工作并持续积累上下文，这些上下文以 **wiki 化实体** 的形式回流到云端共享空间；任何绑定了该空间的 workspace，agent 执行任务前都会默认去空间里检索背景信息。
+**把单人 agent 的 memory，变成团队共享、双向同步的 memory。**
 
-一句话：**把单人 agent 的 memory 变成团队共享、双向同步的 memory。**
+每个人的 agent 在自己的 workspace 里干活，攒下的上下文——做过的决策、踩过的坑、对系统的认知——以 wiki 化实体回流到团队的云端共享空间；团队里任何人的 agent 开工前，都会先来这里看一眼背景再动手。
 
-## 组成
+在线服务：**https://tn.lichangfocus.com**（注册即用，托管在 Cloudflare Workers + D1 上）
 
-```
-server/                 # 云端服务：FastAPI + SQLite（用户/team/邀请/空间/实体版本库/检索）
-server/static/          # 网页后台：注册登录、建 team、邀请码拉人、多空间、实体 wiki 浏览 + 历史
-cli/tn.py               # tn CLI（零依赖 Python）：login/init/pull/push/search/show/new/ls/status/where
-skill/team-network/     # Claude skill：任务前 pull 背景，任务后回流上下文
-install.sh              # 安装 CLI 到 ~/.local/bin，skill 链接到 ~/.claude/skills
-run-server.sh           # 本地/服务器启动（自动建 venv）
-server/Dockerfile       # 容器部署（数据库在 /data volume）
-```
-
-## 使用（AI-native：用户只做两件事——把指令扔给 agent、在网页上点）
-
-服务是多租户中心托管的（官方实例：`https://tn.lichangfocus.com`），用户永远不碰服务器、不碰终端、不碰 token。
-
-**新用户的全部操作 = 把这段话发给自己的 agent：**
+## 30 秒接入：把这段话发给你的 agent
 
 ```text
 请帮我接入团队共享上下文（team-network）：
@@ -30,68 +16,77 @@ server/Dockerfile       # 容器部署（数据库在 /data volume）
 4. 我说完成后，运行 tn connect --finish 完成绑定，并告诉我结果
 ```
 
-agent 会安装工具并甩回来一个**授权链接**；用户点开：未注册先注册（受邀链接进来的会自动入团），没有 team 时页面直接引导创建 team + 空间，选中空间点「授权」即完成。**设备授权流（device flow）让 token 全程不暴露给任何人。**
+剩下的由 agent 引导完成：它装好工具，甩回来一个**授权链接**；你点开——没账号就注册，没 team 页面上直接创建，选中共享空间点「授权」，回来说一声"好了"。全程不碰终端、不碰 token（设备授权流，凭据只在服务端与 agent 之间一次性交接）。
 
-- **邀请同事**：team 页点「生成邀请」，产出一段完整的话（注册链接 + 给 agent 的接入指令），整段发给同事即可
-- **每个空间页**都有现成的"发给 agent 的接入指令"，一键复制
-- **agent 入口文档**：`curl <服务器>/start` 是给 agent 读的接入说明书
+已经在用的团队邀请新人更简单：team 页点「生成邀请」，产出一段完整的话（注册链接 + 上面这样的接入指令），**整段转发给同事即可**。
 
-绑定完成后 agent 全自动：**任务开始** → `tn pull` + `tn search <关键词>` 读团队背景（下行）；**任务结束** → 把决策/事实/坑写成实体 `tn push` 回流（上行）。
+## 为什么需要它
 
-已内置公开服务所需的防护：接口限流、实体/空间/team 配额、密码 PBKDF2 存储、token 哈希化。运维侧（服务器选型、域名 HTTPS、备份、监控、扩容路径）见 [docs/OPS.md](docs/OPS.md)。
+- 同事上周踩过的坑，你的 agent 今天原样再踩一遍
+- "为什么选 JWT 不选 session"这类决策散落在每个人的会话历史里，会话一关就没了
+- agent 的 memory 是单人的：个人积累越多，团队成员之间的信息差反而越大
 
-## 自托管（可选）
+Team Network 用最薄的一层解决它：**一个共享空间 + 一个 skill**，不改变任何人的工作方式。
 
-不想用托管服务的团队可以自己跑同一份代码：
+## 它怎么工作
+
+```
+ 你的 agent                      云端共享空间                     同事的 agent
+（workspace A）              （team 的 wiki 实体库）             （workspace B）
+      │                              │                              │
+      │── 任务开始: pull + search ──►│◄── 任务开始: pull + search ──│
+      │◄──────── 相关背景实体 ───────│───────── 相关背景实体 ──────►│
+      │                              │                              │
+      │── 任务结束: push 新实体 ────►│◄──── 任务结束: push 新实体 ──│
+```
+
+绑定后全自动：**任务开始前**，agent 用任务关键词检索团队背景（下行）；**任务结束后**，把本次值得团队知道的内容写成实体回流（上行）。什么值得同步、什么不许同步（敏感信息），由 skill 里的质量标准约束。
+
+空间里存的不是文件，是五类**知识卡片**（markdown + frontmatter，用 `[[链接]]` 互相关联，agent 和网页端都能沿链接扩展浏览）：
+
+| 类型 | 存什么 | 例子 |
+|---|---|---|
+| `decision` | 决策 + 理由 + 排除了什么 | "鉴权选 JWT 而非 session，因为……" |
+| `fact` | 客观约束、踩过的坑 | "支付回调 15 秒超时，重试无幂等保护" |
+| `entity` | 模块/服务/概念的 wiki 页 | "订单服务：职责、依赖、负责人" |
+| `task-log` | 任务结果摘要 | "2026-07-13 重构订单模块，改了 X/Y" |
+| `question` | 待确认的疑问 | "回调重试策略待与支付组确认" |
+
+## 协作细节
+
+- **网页 wiki**：人也能用——浏览/检索空间、沿 `[[链接]]` 跳转、查看每个实体的完整版本历史（谁、何时、改了什么）
+- **冲突**：乐观锁（push 带 `base_version`），撞车时 agent 拿到双方内容做**语义合并**——保留双方有效信息而不是选边，这是 agent 相比传统 wiki 的天然优势
+- **增量同步**：按空间全局 rev 游标只传变更；本地有完整镜像，离线可读写
+- **组织模型**：一个 team 可建多个共享空间（按项目/领域分）；一个 workspace 绑定一个空间
+- **防护**：接口限流、实体/空间/team 配额、密码 PBKDF2、token 仅存哈希
+
+## 架构与自托管
+
+官方实例跑在 Cloudflare Workers + D1 上，零服务器。服务本身就是发行渠道：`/install.sh` 分发 CLI 与 skill，`/start` 是给 agent 读的接入说明书。
+
+```
+worker/                 # 云端服务（Cloudflare Workers + D1），生产主推
+server/                 # 同一套 API 的 Python 自托管版（FastAPI + SQLite）
+cli/tn.py               # tn CLI（零依赖 Python）：connect/pull/push/search/show/new/…
+skill/team-network/     # agent skill：任务前 pull 背景、任务后回流上下文的行为约定
+docs/OPS.md             # 运维手册：部署选型、备份、监控、扩容路径
+```
+
+自托管三选一（同一套 CLI/skill 对后端透明）：
 
 ```bash
-./run-server.sh                       # 本机起服务（自动建 venv）
-# 或 docker build -t team-network . && docker run -p 8787:8787 -v tn-data:/data team-network
-# 或 Render/Fly：仓库自带 render.yaml / fly.toml
-# 临时公网试用：npx -y localtunnel --port 8787
+# ① 自己的 Cloudflare 账号：cd worker && ./build.sh && npx wrangler deploy（详见 worker/README.md）
+# ② 任意服务器跑 Python 版：./run-server.sh 或 docker build（详见 docs/OPS.md）
+# ③ 没有服务器也不想托管：tn init <一个共享 git 仓库> 当降级后端
 ```
 
-## 实体模型
-
-每个实体是空间里的一个 markdown 文件（`tn where` 查看本地镜像目录）：
-
-```markdown
----
-name: payment-callback-timeout
-type: fact              # entity | decision | fact | task-log | question
-title: 支付回调 15 秒超时
-tags: [payments]
-created_by: alice@team.com
-updated_by: bob@team.com
-updated_at: 2026-07-13
----
-
-支付网关回调必须在 15 秒内响应 200……相关 [[order-service]]。
-```
-
-- `[[实体名]]` 建立实体间关联，agent 和网页端都可沿链接浏览
-- 每次修改产生新版本，网页端可看完整历史（谁、何时、改了什么）
-- `updated_at / updated_by` 由 push 自动盖戳
-
-## 同步与冲突
-
-- **乐观锁**：push 带 `base_version`，云端已被他人更新时返回 409
-- CLI 把双方内容写成 `<<<<<<< local / ======= / >>>>>>> server` 冲突标记，agent 做**语义合并**（保留双方有效信息）后重推——这是 agent 相比传统 wiki 的天然优势
-- 增量拉取：按空间全局 rev 游标，只传变更实体
-- 本地镜像优先：离线可读可写，联网后同步
-
-## 两种后端
-
-| | api（推荐） | git（降级方案） |
-|---|---|---|
-| 云端 | 本服务（team/邀请/多空间/历史/网页浏览） | 一个共享 git 仓库 |
-| 绑定 | `tn init http://server/s/<id>` | `tn init <git-remote>` |
-| 冲突 | 409 + 冲突标记 | rebase + 冲突标记 |
-
-同一套 CLI 命令和 skill 对两种后端透明。
-
-## 下一步（第三刀）
+## Roadmap
 
 - 语义检索（当前为服务端全文打分，中英文可用）
-- 质量闸门：云端定时 agent 做实体合并、去重、过时标记（格式已预留 version/updated_at 字段）
-- 细粒度权限（空间只读成员）、entity watch 通知
+- 质量闸门：云端定时 agent 做实体合并、去重、过时标记
+- 邮箱验证 / 密码找回、token 过期策略
+- 细粒度权限（空间只读成员）、实体变更通知
+
+## License
+
+[MIT](LICENSE)
