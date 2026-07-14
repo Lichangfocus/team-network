@@ -1,0 +1,15 @@
+name = "team-network"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+# 静态资源（网页后台 + tn.py/SKILL.md 分发），先跑 build.sh 生成 public/
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/install.sh", "/s/*", "/join/*"]
+
+# 部署前先: npx wrangler d1 create team-network，把返回的 database_id 填到这里
+[[d1_databases]]
+binding = "DB"
+database_name = "team-network"
+database_id = "PLACEHOLDER"

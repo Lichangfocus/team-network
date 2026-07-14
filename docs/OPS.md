@@ -2,14 +2,16 @@
 
 模式：**我们运维一个多租户服务，用户只需注册**。所有 team/space 共用一套服务和一个数据库，靠成员关系做隔离（代码已实现）。用户侧完整流程只有三步：`curl <域名>/install.sh | bash` → 网页注册/邀请链接入团 → 接入命令扔给 agent。
 
-## 服务器怎么选（按国内团队访问质量排序）
+## 服务器怎么选
 
 | 方案 | 成本 | 上手 | 说明 |
 |---|---|---|---|
-| **香港轻量 VPS**（腾讯云/阿里云 HK）★推荐 | ~30-50 元/月 | 需自己 docker | 国内直连快、无需备案、数据自己攥着 |
+| **Cloudflare Workers + D1** ★主推 | 免费额度长期够用 | 见 [worker/README.md](../worker/README.md) | 零服务器运维，D1 就是云端 SQLite；国内访问务必绑自有域名（workers.dev 不稳） |
+| 香港轻量 VPS（腾讯云/阿里云 HK） | ~30-50 元/月 | 需自己 docker | 国内直连快、无需备案、数据自己攥着（跑 server/ Python 版） |
 | Fly.io（hkg 区） | 免费额度起步 | `fly launch` | 有 fly.toml；国内访问一般但可用 |
-| Zeabur（HK 区） | 免费额度起步 | 连 GitHub 即部署 | 华人团队产品，国内访问友好 |
-| Render | 免费起步 | 连 GitHub 即部署 | 有 render.yaml；free 无持久盘 |
+| Zeabur（HK 区）/ Render | 免费额度起步 | 连 GitHub 即部署 | render.yaml 已备；Render free 无持久盘 |
+
+Worker 版（worker/）与 Python 版（server/）是**同一套 API 和前端**，CLI/skill 对两者透明。
 
 **VPS 部署（推荐路径）**：
 

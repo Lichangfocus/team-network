@@ -4,3 +4,7 @@ server/.venv/
 server/data/
 .team-network/
 .DS_Store
+node_modules/
+worker/public/
+worker/.wrangler/
+.wrangler/
