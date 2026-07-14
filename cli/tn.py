@@ -159,6 +159,8 @@ def get_cred(server):
 def http(method, url, token=None, data=None):
     req = urllib.request.Request(url, method=method)
     req.add_header("Content-Type", "application/json")
+    # Cloudflare 等 WAF 会拦默认的 Python-urllib UA（error 1010）
+    req.add_header("User-Agent", "tn-cli/1.0 (+https://github.com/Lichangfocus/team-network)")
     if token:
         req.add_header("Authorization", "Bearer " + token)
     payload = json.dumps(data).encode() if data is not None else None
