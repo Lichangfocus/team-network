@@ -6,17 +6,13 @@
 
 在线服务：**https://tn.lichangfocus.com**（注册即用，托管在 Cloudflare Workers + D1 上）
 
-## 30 秒接入：把这段话发给你的 agent
+## 接入 = 对你的 agent 说一句话
 
 ```text
-请帮我接入团队共享上下文（team-network）：
-1. 如果没有 tn 命令，先运行: curl -fsSL https://tn.lichangfocus.com/install.sh | bash
-2. 在我的项目目录运行: tn connect https://tn.lichangfocus.com
-3. 把它输出的授权链接发给我，我在浏览器点击授权
-4. 我说完成后，运行 tn connect --finish 完成绑定，并告诉我结果
+帮我安装这个技能：https://tn.lichangfocus.com/install
 ```
 
-剩下的由 agent 引导完成：它装好工具，甩回来一个**授权链接**；你点开——没账号就注册，没 team 页面上直接创建，选中共享空间点「授权」，回来说一声"好了"。全程不碰终端、不碰 token（设备授权流，凭据只在服务端与 agent 之间一次性交接）。
+剩下的全由 agent 完成：它读取该 URL 里的接入说明，装好工具，甩回来一个**授权链接**；你点开——没账号就注册，没 team 页面上直接创建，选中共享空间点「授权」，回来说一声"好了"。全程不碰终端、不碰 token（设备授权流，凭据只在服务端与 agent 之间一次性交接）。
 
 已经在用的团队邀请新人更简单：team 页点「生成邀请」，产出一段完整的话（注册链接 + 上面这样的接入指令），**整段转发给同事即可**。
 

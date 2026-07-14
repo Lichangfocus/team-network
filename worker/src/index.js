@@ -157,35 +157,39 @@ case ":$PATH:" in
   *) echo "⚠ $BIN 不在 PATH，请在 ~/.zshrc 加入: export PATH=\\"\\$HOME/.local/bin:\\$PATH\\"" ;;
 esac
 echo
-echo "下一步（给 agent）：在用户的项目目录运行 tn connect ${origin} ，把输出的授权链接发给用户点击，然后运行 tn connect --finish 完成绑定。"
+echo "下一步（给 agent）：完整接入流程见 ${origin}/install ——在用户项目目录 tn connect，把授权链接发用户点击，然后 tn connect --finish。"
 `;
 }
 
-// ---------- /start：AI-native 入口（agent 可读的接入说明） ----------
-function startDoc(origin) {
-  return `# Team Network 接入说明（给 agent 执行）
+// ---------- /install：AI-native 入口（agent 可读、自包含的接入文档） ----------
+// 用户只需对 agent 说一句：帮我安装这个技能：<origin>/install
+function installDoc(origin, spaceId) {
+  const target = spaceId ? `${origin}/s/${spaceId}` : origin;
+  return `# team-network 技能安装与接入（agent 按此执行，无需用户理解细节）
 
-Team Network 是团队共享上下文空间：绑定后，agent 在任务前自动拉取团队背景实体，任务后把新产生的决策/事实/坑回流共享。
+team-network = 团队共享上下文空间：绑定后你在任务前自动拉取团队背景实体，任务后把新产生的决策/事实/坑回流共享。用户唯一要做的事：点一次授权链接。
 
 按顺序执行：
 
-1. 安装（若 \`tn\` 命令已存在可跳过）：
+1. 安装 tn CLI 与 team-network skill（幂等，已装会覆盖为最新）：
    curl -fsSL ${origin}/install.sh | bash
+   若 ~/.local/bin 不在 PATH，用 ~/.local/bin/tn 调用即可。
 
-2. 在用户的项目目录（workspace 根目录）运行：
-   tn connect ${origin}
+2. 确认当前在用户的项目目录（workspace 根目录），运行：
+   tn connect ${target}
 
-3. 上一步会输出一个授权链接。把链接原样发给用户，请用户在浏览器打开：
-   - 未注册会先引导注册（无需邀请码；受邀用户会自动入团）
-   - 没有 team/空间时页面上可直接创建
-   - 用户在页面上选定要绑定的共享空间并点「授权」
+3. 上一步输出一个授权链接。把链接原样发给用户，请用户在浏览器打开：
+   - 未注册会先引导注册（受邀链接进来的用户会自动入团）
+   - 没有 team/空间时，页面上可一步创建
+   - 用户选定共享空间点「授权」即完成，让用户点完告诉你一声
 
-4. 用户说点完了之后，运行：
+4. 用户确认后运行：
    tn connect --finish
-   若提示仍在等待，稍后重试该命令（链接 15 分钟内有效）。
+   提示仍在等待就过一会儿重试（授权链接 15 分钟内有效）。
 
-5. 绑定成功后即完成。之后每次任务：开始前 \`tn pull\` + \`tn search <关键词>\` 读团队背景；
-   结束后把值得团队知道的上下文写成实体 \`tn push\` 回流（详见已安装的 team-network skill）。
+5. 向用户报告绑定结果（绑到了哪个 team/空间）。完成。
+
+之后的日常行为由已安装的 team-network skill 约定：任务开始 tn pull + tn search <关键词> 读团队背景；任务结束把值得团队知道的上下文写成实体 tn push 回流。
 `;
 }
 
@@ -203,8 +207,11 @@ export default {
       }
       if (p === "/install.sh")
         return new Response(installScript(url.origin), { headers: { "Content-Type": "text/x-shellscript" } });
-      if (p === "/start")
-        return new Response(startDoc(url.origin), { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
+      if (p === "/install" || p === "/start") {
+        const sid = parseInt(url.searchParams.get("space") || "0", 10) || null;
+        return new Response(installDoc(url.origin, sid),
+          { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
+      }
       if ((mt = p.match(/^\/s\/(\d+)$/)))
         return Response.redirect(`${url.origin}/#/space/${mt[1]}`, 302);
       if ((mt = p.match(/^\/join\/([\w-]+)$/)))

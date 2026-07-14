@@ -91,12 +91,8 @@ document.addEventListener("click", async (ev) => {
   setTimeout(() => (ev.target.textContent = "复制"), 2000);
 });
 
-function connectInstruction(origin, target) {
-  return `请帮我接入团队共享上下文（team-network）：
-1. 如果没有 tn 命令，先运行: curl -fsSL ${origin}/install.sh | bash
-2. 在我的项目目录运行: tn connect ${target}
-3. 把它输出的授权链接发给我，我在浏览器点击授权
-4. 我说完成后，运行 tn connect --finish 完成绑定，并告诉我结果`;
+function connectInstruction(origin, spaceId) {
+  return `帮我安装这个技能：${origin}/install${spaceId ? `?space=${spaceId}` : ""}`;
 }
 
 // ---------- 页面 ----------
@@ -130,7 +126,7 @@ async function pageLogin() {
       </div>
       <details style="margin-top:18px;text-align:left"><summary class="meta">第一次用？整个接入交给你的 agent</summary>
         <p class="sub" style="margin-top:8px">把这段话发给你的 agent（Claude Code 等），它会安装工具并把授权链接发回给你，全程无需终端操作：</p>
-        ${agentMsgBlock("first-connect", connectInstruction(location.origin, location.origin))}
+        ${agentMsgBlock("first-connect", connectInstruction(location.origin))}
       </details>
     </div>`;
     $("#f-switch").onclick = () => { mode = mode === "login" ? "register" : "login"; render(); };
@@ -313,7 +309,7 @@ ${location.origin}/join/${r.code}
 
 入团后把下面这段发给你的 agent，它会带你完成接入：
 
-${connectInstruction(location.origin, location.origin)}`;
+${connectInstruction(location.origin)}`;
     $("#inv-out").innerHTML = agentMsgBlock("inv-msg", msg, "整段发给同事即可（链接可用 20 次）");
   };
 }
@@ -334,7 +330,7 @@ async function pageSpace(sid, entityName) {
       <p class="sub">${ents.length} 实体 · rev ${sp.rev}</p>
       <h2>接入这个空间</h2>
       <p class="sub">把这段话发给你的 agent（新电脑/新项目都一样，剩下的它来干）：</p>
-      ${agentMsgBlock("space-connect", connectInstruction(location.origin, `${location.origin}/s/${sid}`))}
+      ${agentMsgBlock("space-connect", connectInstruction(location.origin, sid))}
     </div>
     <div class="card">
       <div class="row" style="margin-bottom:12px">
