@@ -311,20 +311,72 @@ def cmd_init(args):
         init_git(args.target, args.name)
 
 
-def cmd_connect(args):
-    """一条命令完成 登录 + 绑定 + 首次同步（token 来自网页空间页的「接入命令」）。"""
-    m = re.match(r"^(https?://[^/]+)/s/(\d+)$", args.target.rstrip("/"))
-    if not m:
-        die("目标格式应为 http(s)://服务器/s/<空间id>（网页空间页可复制完整接入命令）")
-    server, sid = m.group(1), int(m.group(2))
-    status, me = http("GET", server + "/api/me", args.token)
+PENDING_FILE = TN_HOME / "pending-connect.json"
+
+
+def finish_with_token(server, token, sid):
+    status, me = http("GET", server + "/api/me", token)
     if status != 200:
-        die("token 无效或已失效，回到网页空间页重新生成接入命令")
+        die("token 无效或已失效")
     creds = load_creds()
-    creds[server] = {"token": args.token, "email": me["email"]}
+    creds[server] = {"token": token, "email": me["email"]}
     save_creds(creds)
     print(f"✓ 已登录 {server}（{me['email']}）")
     init_api(server, sid)
+
+
+def cmd_connect(args):
+    """设备授权流：agent 发起 → 输出授权链接给用户点 → tn connect --finish 完成。
+
+    兼容旧的 --token 直连方式（tn connect <server>/s/<id> --token TOK）。
+    """
+    if args.finish:
+        return connect_finish()
+    if not args.target:
+        die("用法: tn connect <服务器地址>[/s/<空间id>]，或 tn connect --finish")
+    t = args.target.rstrip("/")
+    m = re.match(r"^(https?://[^/]+)(?:/s/(\d+))?$", t)
+    if not m:
+        die("目标格式应为 http(s)://服务器 或 http(s)://服务器/s/<空间id>")
+    server, hint = m.group(1), m.group(2)
+    if args.token:
+        if not hint:
+            die("--token 方式需要完整目标 <服务器>/s/<空间id>")
+        return finish_with_token(server, args.token, int(hint))
+
+    status, r = http("POST", server + "/api/device", None,
+                     {"space_hint": int(hint) if hint else None})
+    if status != 200:
+        die(r.get("detail", "无法创建设备授权"))
+    TN_HOME.mkdir(parents=True, exist_ok=True)
+    PENDING_FILE.write_text(json.dumps(
+        {"server": server, "code": r["code"], "workspace": os.getcwd()}) + "\n")
+    print("请把下面的授权链接发给用户，在浏览器中打开并完成授权：")
+    print(f"\n  🔗 {r['link']}\n")
+    print("（未注册会先引导注册；页面上可选择/创建要绑定的共享空间。链接 15 分钟内有效。）")
+    print("用户完成后，在本目录运行: tn connect --finish")
+
+
+def connect_finish():
+    if not PENDING_FILE.is_file():
+        die("没有等待中的授权。先运行: tn connect <服务器地址>")
+    import time
+    pend = json.loads(PENDING_FILE.read_text())
+    server, code = pend["server"], pend["code"]
+    if os.path.realpath(pend.get("workspace", os.getcwd())) != os.path.realpath(os.getcwd()):
+        print(f"提示：授权是在 {pend['workspace']} 发起的，将绑定当前目录 {os.getcwd()}")
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        status, r = http("GET", f"{server}/api/device/{code}/poll")
+        if status == 200 and r.get("status") == "approved":
+            PENDING_FILE.unlink(missing_ok=True)
+            return finish_with_token(server, r["token"], int(r["space_id"]))
+        if status == 200 and r.get("status") == "expired":
+            PENDING_FILE.unlink(missing_ok=True)
+            die("授权链接已过期，请重新运行 tn connect")
+        time.sleep(3)
+    print("用户还未完成授权。请确认用户已点开链接并授权，然后再次运行: tn connect --finish")
+    sys.exit(3)
 
 
 def write_ws_config(cfg):
@@ -690,9 +742,10 @@ def main():
     p.add_argument("--token", help="直接使用网页后台生成的 CLI token（免输密码）")
     p.set_defaults(func=cmd_login)
 
-    p = sub.add_parser("connect", help="一条命令完成登录+绑定（网页空间页可复制完整命令）")
-    p.add_argument("target", help="http(s)://服务器/s/<空间id>")
-    p.add_argument("--token", required=True, help="网页空间页生成的接入 token")
+    p = sub.add_parser("connect", help="接入共享空间：发起设备授权（用户网页点一下），--finish 完成")
+    p.add_argument("target", nargs="?", help="http(s)://服务器 或 http(s)://服务器/s/<空间id>")
+    p.add_argument("--token", help="（兼容旧方式）网页生成的接入 token，需配合 /s/<id> 目标")
+    p.add_argument("--finish", action="store_true", help="用户完成网页授权后，取回凭据完成绑定")
     p.set_defaults(func=cmd_connect)
 
     p = sub.add_parser("init", help="绑定当前 workspace 到共享空间")

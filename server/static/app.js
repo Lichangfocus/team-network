@@ -68,22 +68,42 @@ function parseFrontmatter(content) {
 function setUserbox(user) {
   $("#userbox").innerHTML = user
     ? `<span>${esc(user.name)} &lt;${esc(user.email)}&gt;</span>
-       <button class="sm ghost" id="btn-cli-token">CLI token</button>
        <button class="sm ghost" id="btn-logout">退出</button>`
     : "";
   if (user) {
     $("#btn-logout").onclick = () => { localStorage.removeItem("tn_token"); API.token = ""; location.hash = "#/login"; };
-    $("#btn-cli-token").onclick = async () => {
-      const r = await API.post("/api/cli-token");
-      prompt("复制此 token，在终端运行 tn login <服务器地址> --token <token>：", r.token);
-    };
   }
+}
+
+// 「发给 agent 的指令」块：一键复制
+function agentMsgBlock(id, text, hint) {
+  return `<div class="agent-msg">
+    <pre id="${id}" style="white-space:pre-wrap">${esc(text)}</pre>
+    <div class="row"><button class="sm" data-copy="${id}">复制</button>
+    <span class="meta">${esc(hint || "复制后直接粘贴给你的 agent")}</span></div>
+  </div>`;
+}
+document.addEventListener("click", async (ev) => {
+  const id = ev.target?.dataset?.copy;
+  if (!id) return;
+  try { await navigator.clipboard.writeText($(`#${CSS.escape(id)}`).textContent); ev.target.textContent = "已复制 ✓"; }
+  catch { ev.target.textContent = "复制失败，请手动全选"; }
+  setTimeout(() => (ev.target.textContent = "复制"), 2000);
+});
+
+function connectInstruction(origin, target) {
+  return `请帮我接入团队共享上下文（team-network）：
+1. 如果没有 tn 命令，先运行: curl -fsSL ${origin}/install.sh | bash
+2. 在我的项目目录运行: tn connect ${target}
+3. 把它输出的授权链接发给我，我在浏览器点击授权
+4. 我说完成后，运行 tn connect --finish 完成绑定，并告诉我结果`;
 }
 
 // ---------- 页面 ----------
 async function pageLogin() {
   setUserbox(null);
-  let mode = localStorage.getItem("tn_pending_invite") ? "register" : "login";
+  let mode = (localStorage.getItem("tn_pending_invite") || localStorage.getItem("tn_pending_link"))
+    ? "register" : "login";
   let inviteBanner = "";
   const pending = localStorage.getItem("tn_pending_invite");
   if (pending) {
@@ -92,6 +112,8 @@ async function pageLogin() {
       inviteBanner = `<p class="ok">受邀加入 team「${esc(inv.team_name)}」——注册或登录后自动加入。</p>`;
     } catch { localStorage.removeItem("tn_pending_invite"); }
   }
+  if (localStorage.getItem("tn_pending_link"))
+    inviteBanner += `<p class="ok">你的 agent 正在等待接入授权——注册或登录后继续。</p>`;
   const render = () => {
     app.innerHTML = `
     <div class="card center">
@@ -106,6 +128,10 @@ async function pageLogin() {
         <button id="f-go">${mode === "login" ? "登录" : "注册"}</button>
         <a href="javascript:void 0" id="f-switch">${mode === "login" ? "没有账号？注册" : "已有账号？登录"}</a>
       </div>
+      <details style="margin-top:18px;text-align:left"><summary class="meta">第一次用？整个接入交给你的 agent</summary>
+        <p class="sub" style="margin-top:8px">把这段话发给你的 agent（Claude Code 等），它会安装工具并把授权链接发回给你，全程无需终端操作：</p>
+        ${agentMsgBlock("first-connect", connectInstruction(location.origin, location.origin))}
+      </details>
     </div>`;
     $("#f-switch").onclick = () => { mode = mode === "login" ? "register" : "login"; render(); };
     $("#f-go").onclick = async () => {
@@ -116,20 +142,99 @@ async function pageLogin() {
         API.token = r.token;
         localStorage.setItem("tn_token", r.token);
         const code = localStorage.getItem("tn_pending_invite");
+        let joinedTeam = null;
         if (code) {
           localStorage.removeItem("tn_pending_invite");
-          try {
-            const j = await API.post(`/api/invites/${code}/accept`);
-            location.hash = `#/team/${j.team_id}`;
-            return;
-          } catch {}
+          try { joinedTeam = (await API.post(`/api/invites/${code}/accept`)).team_id; } catch {}
         }
-        location.hash = "#/teams";
+        const link = localStorage.getItem("tn_pending_link");
+        if (link) { location.hash = `#/link/${link}`; return; }
+        location.hash = joinedTeam ? `#/team/${joinedTeam}` : "#/teams";
       } catch (e) { $("#f-err").textContent = e.message; }
     };
     $("#f-pw").addEventListener("keydown", (e) => e.key === "Enter" && $("#f-go").click());
   };
   render();
+}
+
+// 设备授权页：agent 发起 tn connect 后用户点开的链接
+async function pageLink(code) {
+  const me = await API.get("/api/me");
+  setUserbox(me);
+  let info;
+  try { info = await API.get(`/api/device/${code}`); }
+  catch (e) {
+    app.innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div>
+      <p class="meta">请回到 agent 重新运行 tn connect 获取新链接。</p></div>`;
+    return;
+  }
+  if (info.status === "approved") {
+    app.innerHTML = `<div class="card"><h1>该链接已完成授权</h1>
+      <p class="meta">回到你的 agent 继续即可。</p></div>`;
+    return;
+  }
+  const teams = await API.get("/api/teams");
+  const details = await Promise.all(teams.map((t) => API.get(`/api/teams/${t.id}`)));
+  const spaces = details.flatMap((t) => t.spaces.map((s) => ({ ...s, team_name: t.name, team_id: t.id })));
+  const preselect = spaces.find((s) => s.id === info.space_hint)?.id ?? (spaces.length === 1 ? spaces[0].id : null);
+
+  app.innerHTML = `
+    <div class="card center" style="max-width:560px">
+      <h1>授权 agent 接入</h1>
+      <p class="sub">你的 agent 请求绑定一个共享上下文空间。选择（或创建）后点授权。</p>
+      ${spaces.length ? `
+        <div id="sp-list" style="text-align:left">${spaces.map((s) => `
+          <label class="list-item" style="cursor:pointer">
+            <input type="radio" name="sp" value="${s.id}" ${s.id === preselect ? "checked" : ""}>
+            <strong>${esc(s.team_name)} / ${esc(s.name)}</strong>
+            <span class="meta">${s.entities} 实体</span>
+          </label>`).join("")}
+        </div>
+        <div class="row" style="margin-top:14px"><button id="lk-approve">授权绑定</button></div>
+        <details style="margin-top:14px;text-align:left"><summary class="meta">或新建一个空间</summary>
+          <div class="row" style="margin-top:8px">
+            <select id="lk-team">${details.map((t) => `<option value="${t.id}">${esc(t.name)}</option>`).join("")}</select>
+            <input id="lk-space" placeholder="新空间名称">
+            <button id="lk-create" class="ghost sm">创建并选中</button>
+          </div>
+        </details>`
+      : `
+        <p class="sub">你还没有 team——先创建一个（team 用来拉同事进来，空间存团队共享的上下文实体）。</p>
+        <input id="lk-nteam" placeholder="team 名称（如：支付组）">
+        <input id="lk-nspace" placeholder="共享空间名称（如：payments-context）" value="shared-context">
+        <div class="row"><button id="lk-setup">创建并授权</button></div>`}
+      <div class="err" id="lk-err"></div>
+    </div>`;
+
+  const approve = async (sid) => {
+    try {
+      const r = await API.post(`/api/device/${code}/approve`, { space_id: sid });
+      app.innerHTML = `<div class="card center"><h1>✓ 授权完成</h1>
+        <p class="sub">已绑定共享空间「${esc(r.space_name)}」。</p>
+        <p class="meta">回到你的 agent，告诉它「授权好了」（它会运行 tn connect --finish）。本页可以关闭。</p></div>`;
+    } catch (e) { $("#lk-err").textContent = e.message; }
+  };
+  if (spaces.length) {
+    $("#lk-approve").onclick = () => {
+      const sel = document.querySelector('input[name="sp"]:checked');
+      if (!sel) { $("#lk-err").textContent = "请先选择一个空间"; return; }
+      approve(+sel.value);
+    };
+    $("#lk-create").onclick = async () => {
+      try {
+        const r = await API.post(`/api/teams/${$("#lk-team").value}/spaces`, { name: $("#lk-space").value });
+        approve(r.id);
+      } catch (e) { $("#lk-err").textContent = e.message; }
+    };
+  } else {
+    $("#lk-setup").onclick = async () => {
+      try {
+        const t = await API.post("/api/teams", { name: $("#lk-nteam").value });
+        const s = await API.post(`/api/teams/${t.id}/spaces`, { name: $("#lk-nspace").value || "shared-context" });
+        approve(s.id);
+      } catch (e) { $("#lk-err").textContent = e.message; }
+    };
+  }
 }
 
 async function pageTeams() {
@@ -193,9 +298,9 @@ async function pageTeam(tid) {
           <span class="badge">${m.role}</span>
         </div>`).join("")}
       <div class="row" style="margin-top:12px">
-        <button id="inv-create" class="ghost">生成邀请码</button>
-        <span class="meta" id="inv-out"></span>
+        <button id="inv-create" class="ghost">生成邀请</button>
       </div>
+      <div id="inv-out" style="margin-top:8px"></div>
     </div>`;
   $("#s-create").onclick = async () => {
     try { const r = await API.post(`/api/teams/${tid}/spaces`, { name: $("#s-name").value }); location.hash = `#/space/${r.id}`; }
@@ -203,8 +308,13 @@ async function pageTeam(tid) {
   };
   $("#inv-create").onclick = async () => {
     const r = await API.post(`/api/teams/${tid}/invites`);
-    const url = `${location.origin}/join/${r.code}`;
-    $("#inv-out").innerHTML = `邀请链接（可用 20 次，直接发给同事）：<br><span class="cmd"><code>${esc(url)}</code></span>`;
+    const msg = `邀请你加入「${t.name}」的团队共享上下文（点开注册即自动入团）：
+${location.origin}/join/${r.code}
+
+入团后把下面这段发给你的 agent，它会带你完成接入：
+
+${connectInstruction(location.origin, location.origin)}`;
+    $("#inv-out").innerHTML = agentMsgBlock("inv-msg", msg, "整段发给同事即可（链接可用 20 次）");
   };
 }
 
@@ -222,15 +332,9 @@ async function pageSpace(sid, entityName) {
     <div class="card">
       <h1>${esc(sp.name)}</h1>
       <p class="sub">${ents.length} 实体 · rev ${sp.rev}</p>
-      <h2>接入（两步）</h2>
-      <p class="sub">1. 每台电脑装一次（终端执行）：</p>
-      <div class="cmd"><code>curl -fsSL ${esc(location.origin)}/install.sh | bash</code></div>
-      <p class="sub" style="margin-top:10px">2. 在要共享上下文的项目目录里，把接入命令直接发给你的 agent（或终端执行）：</p>
-      <div class="row">
-        <button id="gen-connect" class="sm">生成我的接入命令</button>
-        <span class="meta">命令含个人 token，别发给他人</span>
-      </div>
-      <div id="connect-out" style="margin-top:8px"></div>
+      <h2>接入这个空间</h2>
+      <p class="sub">把这段话发给你的 agent（新电脑/新项目都一样，剩下的它来干）：</p>
+      ${agentMsgBlock("space-connect", connectInstruction(location.origin, `${location.origin}/s/${sid}`))}
     </div>
     <div class="card">
       <div class="row" style="margin-bottom:12px">
@@ -238,12 +342,6 @@ async function pageSpace(sid, entityName) {
       </div>
       <div id="ent-list">${entListHtml(ents, sid)}</div>
     </div>`;
-  $("#gen-connect").onclick = async () => {
-    const r = await API.post("/api/cli-token");
-    const cmd = `tn connect ${location.origin}/s/${sid} --token ${r.token}`;
-    $("#connect-out").innerHTML = `<div class="cmd"><code>${esc(cmd)}</code></div>
-      <p class="meta">点选即全选，复制后发给 agent。绑定完成后，该目录下的 agent 会自动在任务前拉取、任务后回流团队上下文。</p>`;
-  };
   const doSearch = async () => {
     const q = $("#q").value.trim();
     if (!q) { $("#ent-list").innerHTML = entListHtml(ents, sid); return; }
@@ -324,6 +422,16 @@ async function route() {
       app.innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
     }
     return;
+  }
+  if ((m = hash.match(/^#\/link\/([\w-]+)$/))) {
+    if (!API.token) { localStorage.setItem("tn_pending_link", m[1]); location.hash = "#/login"; return; }
+    localStorage.removeItem("tn_pending_link");
+    try { return await pageLink(m[1]); }
+    catch (e) {
+      if (e.message !== "请先登录")
+        app.innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
+      return;
+    }
   }
   if (!API.token && hash !== "#/login") { location.hash = "#/login"; return; }
   try {

@@ -157,7 +157,35 @@ case ":$PATH:" in
   *) echo "⚠ $BIN 不在 PATH，请在 ~/.zshrc 加入: export PATH=\\"\\$HOME/.local/bin:\\$PATH\\"" ;;
 esac
 echo
-echo "下一步：打开 $SERVER 注册并加入/创建 team，在共享空间页复制「接入命令」发给你的 agent 即可。"
+echo "下一步（给 agent）：在用户的项目目录运行 tn connect ${origin} ，把输出的授权链接发给用户点击，然后运行 tn connect --finish 完成绑定。"
+`;
+}
+
+// ---------- /start：AI-native 入口（agent 可读的接入说明） ----------
+function startDoc(origin) {
+  return `# Team Network 接入说明（给 agent 执行）
+
+Team Network 是团队共享上下文空间：绑定后，agent 在任务前自动拉取团队背景实体，任务后把新产生的决策/事实/坑回流共享。
+
+按顺序执行：
+
+1. 安装（若 \`tn\` 命令已存在可跳过）：
+   curl -fsSL ${origin}/install.sh | bash
+
+2. 在用户的项目目录（workspace 根目录）运行：
+   tn connect ${origin}
+
+3. 上一步会输出一个授权链接。把链接原样发给用户，请用户在浏览器打开：
+   - 未注册会先引导注册（无需邀请码；受邀用户会自动入团）
+   - 没有 team/空间时页面上可直接创建
+   - 用户在页面上选定要绑定的共享空间并点「授权」
+
+4. 用户说点完了之后，运行：
+   tn connect --finish
+   若提示仍在等待，稍后重试该命令（链接 15 分钟内有效）。
+
+5. 绑定成功后即完成。之后每次任务：开始前 \`tn pull\` + \`tn search <关键词>\` 读团队背景；
+   结束后把值得团队知道的上下文写成实体 \`tn push\` 回流（详见已安装的 team-network skill）。
 `;
 }
 
@@ -175,10 +203,19 @@ export default {
       }
       if (p === "/install.sh")
         return new Response(installScript(url.origin), { headers: { "Content-Type": "text/x-shellscript" } });
+      if (p === "/start")
+        return new Response(startDoc(url.origin), { headers: { "Content-Type": "text/markdown; charset=utf-8" } });
       if ((mt = p.match(/^\/s\/(\d+)$/)))
         return Response.redirect(`${url.origin}/#/space/${mt[1]}`, 302);
       if ((mt = p.match(/^\/join\/([\w-]+)$/)))
         return Response.redirect(`${url.origin}/#/join/${mt[1]}`, 302);
+      if ((mt = p.match(/^\/link\/([\w-]+)$/)))
+        return Response.redirect(`${url.origin}/#/link/${mt[1]}`, 302);
+
+      if (p === "/api/device" && m === "POST") return await deviceCreate(env, request, url);
+      if ((mt = p.match(/^\/api\/device\/([\w-]+)$/)) && m === "GET") return await deviceInfo(env, request, mt[1]);
+      if ((mt = p.match(/^\/api\/device\/([\w-]+)\/poll$/)) && m === "GET") return await devicePoll(env, request, mt[1]);
+      if ((mt = p.match(/^\/api\/device\/([\w-]+)\/approve$/)) && m === "POST") return await deviceApprove(env, request, mt[1]);
 
       if (p === "/api/register" && m === "POST") return await register(env, request);
       if (p === "/api/login" && m === "POST") return await login(env, request);
@@ -212,6 +249,58 @@ export default {
     }
   },
 };
+
+// ---------- 设备授权流（AI-native：agent 发起，用户网页点一下） ----------
+const DEVICE_TTL_SEC = 900;
+
+function deviceExpired(row) {
+  return Date.now() - Date.parse(row.created_at) > DEVICE_TTL_SEC * 1000;
+}
+
+async function deviceCreate(env, request, url) {
+  rateLimit(request, "device", 10, 600);
+  const d = await readBody(request);
+  const hint = parseInt(d.space_hint || 0, 10) || null;
+  const code = randCode(9);
+  await env.DB.prepare("INSERT INTO device_codes(code,space_hint,created_at) VALUES(?,?,?)")
+    .bind(code, hint, nowIso()).run();
+  return j({ code, link: `${url.origin}/link/${code}`, interval: 3, expires_in: DEVICE_TTL_SEC });
+}
+
+async function deviceInfo(env, request, code) {
+  rateLimit(request, "device-info", 60, 600);
+  const r = await env.DB.prepare("SELECT * FROM device_codes WHERE code=?").bind(code).first();
+  if (!r || deviceExpired(r)) throw new ApiError(404, "授权码无效或已过期");
+  return j({ status: r.status, space_hint: r.space_hint });
+}
+
+async function devicePoll(env, request, code) {
+  rateLimit(request, "device-poll", 60, 60);
+  const r = await env.DB.prepare("SELECT * FROM device_codes WHERE code=?").bind(code).first();
+  if (!r) return j({ status: "expired" });
+  if (deviceExpired(r)) {
+    await env.DB.prepare("DELETE FROM device_codes WHERE code=?").bind(code).run();
+    return j({ status: "expired" });
+  }
+  if (r.status !== "approved") return j({ status: "pending" });
+  await env.DB.prepare("DELETE FROM device_codes WHERE code=?").bind(code).run(); // token 一次性取走
+  return j({ status: "approved", token: r.token, space_id: r.space_id });
+}
+
+async function deviceApprove(env, request, code) {
+  const u = await authUser(env, request);
+  const d = await readBody(request);
+  const sid = parseInt(d.space_id || 0, 10);
+  if (!sid) throw new ApiError(400, "缺少 space_id");
+  const r = await env.DB.prepare("SELECT * FROM device_codes WHERE code=?").bind(code).first();
+  if (!r || deviceExpired(r)) throw new ApiError(404, "授权码无效或已过期，请让 agent 重新运行 tn connect");
+  if (r.status === "approved") throw new ApiError(409, "该授权码已被使用");
+  const sp = await getSpace(env, u.id, sid); // 校验授权者确实是该空间成员
+  const token = await issueToken(env, u.id, "cli");
+  await env.DB.prepare("UPDATE device_codes SET status='approved', token=?, space_id=? WHERE code=?")
+    .bind(token, sid, code).run();
+  return j({ ok: true, space_id: sid, space_name: sp.name });
+}
 
 // ---------- 用户 ----------
 async function register(env, request) {

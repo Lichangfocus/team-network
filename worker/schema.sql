@@ -63,3 +63,12 @@ CREATE TABLE IF NOT EXISTS entity_versions(
   PRIMARY KEY(entity_id, version)
 );
 CREATE INDEX IF NOT EXISTS idx_entities_space_rev ON entities(space_id, rev);
+-- 设备授权流（AI-native 接入：agent 拿链接，用户点一下即绑定）
+CREATE TABLE IF NOT EXISTS device_codes(
+  code TEXT PRIMARY KEY,
+  space_hint INTEGER,
+  status TEXT NOT NULL DEFAULT 'pending',
+  token TEXT,
+  space_id INTEGER,
+  created_at TEXT NOT NULL
+);

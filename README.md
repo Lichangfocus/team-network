@@ -16,23 +16,27 @@ run-server.sh           # 本地/服务器启动（自动建 venv）
 server/Dockerfile       # 容器部署（数据库在 /data volume）
 ```
 
-## 使用（主推：中心化托管服务，用户零运维）
+## 使用（AI-native：用户只做两件事——把指令扔给 agent、在网页上点）
 
-服务是多租户的：我们运维**一个**服务，所有 team 注册即用，永远不碰服务器。以官方域名 `https://tn.example.com` 为例（部署见 [docs/OPS.md](docs/OPS.md)），用户的完整旅程只有三步：
+服务是多租户中心托管的（官方实例：`https://team-network.lichangin.workers.dev`，将迁移到 `tn.lichangfocus.com`），用户永远不碰服务器、不碰终端、不碰 token。
 
-```bash
-# ① 每台电脑装一次：装好 tn CLI + agent skill（服务本身就是发行渠道）
-curl -fsSL https://tn.example.com/install.sh | bash
+**新用户的全部操作 = 把这段话发给自己的 agent：**
+
+```text
+请帮我接入团队共享上下文（team-network）：
+1. 如果没有 tn 命令，先运行: curl -fsSL https://team-network.lichangin.workers.dev/install.sh | bash
+2. 在我的项目目录运行: tn connect https://team-network.lichangin.workers.dev
+3. 把它输出的授权链接发给我，我在浏览器点击授权
+4. 我说完成后，运行 tn connect --finish 完成绑定，并告诉我结果
 ```
 
-**② 网页上完成组织关系**：打开 `https://tn.example.com` 注册 → 建 team → 页面生成**邀请链接**发给同事（同事点开即引导注册并自动入团）→ 建共享空间。
+agent 会安装工具并甩回来一个**授权链接**；用户点开：未注册先注册（受邀链接进来的会自动入团），没有 team 时页面直接引导创建 team + 空间，选中空间点「授权」即完成。**设备授权流（device flow）让 token 全程不暴露给任何人。**
 
-```bash
-# ③ 空间页点「生成我的接入命令」，把命令直接扔给 agent（在项目目录下）
-tn connect https://tn.example.com/s/1 --token <你的token>
-```
+- **邀请同事**：team 页点「生成邀请」，产出一段完整的话（注册链接 + 给 agent 的接入指令），整段发给同事即可
+- **每个空间页**都有现成的"发给 agent 的接入指令"，一键复制
+- **agent 入口文档**：`curl <服务器>/start` 是给 agent 读的接入说明书
 
-绑定完成后，这个 workspace 里的 agent 全自动：**任务开始** → `tn pull` + `tn search <关键词>` 读团队背景（下行）；**任务结束** → 把本次产生的决策/事实/坑写成实体 `tn push` 回流（上行）。
+绑定完成后 agent 全自动：**任务开始** → `tn pull` + `tn search <关键词>` 读团队背景（下行）；**任务结束** → 把决策/事实/坑写成实体 `tn push` 回流（上行）。
 
 已内置公开服务所需的防护：接口限流、实体/空间/team 配额、密码 PBKDF2 存储、token 哈希化。运维侧（服务器选型、域名 HTTPS、备份、监控、扩容路径）见 [docs/OPS.md](docs/OPS.md)。
 

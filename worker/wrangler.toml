@@ -6,7 +6,12 @@ compatibility_date = "2026-01-01"
 [assets]
 directory = "./public"
 binding = "ASSETS"
-run_worker_first = ["/api/*", "/install.sh", "/s/*", "/join/*"]
+run_worker_first = ["/api/*", "/install.sh", "/start", "/s/*", "/join/*", "/link/*"]
+
+# 自定义域名（lichangfocus.com 加入本 Cloudflare 账号后取消注释重新 deploy 即生效）
+# routes = [
+#   { pattern = "tn.lichangfocus.com", custom_domain = true }
+# ]
 
 # 部署前先: npx wrangler d1 create team-network，把返回的 database_id 填到这里
 [[d1_databases]]

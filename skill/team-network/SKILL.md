@@ -9,7 +9,14 @@ description: 团队共享上下文空间。当 workspace 存在 .team-network/co
 
 前置条件：workspace 根目录存在 `.team-network/config.json`。若不存在，本 skill 不生效。
 
-**绑定流程**：用户会扔给你一条形如 `tn connect http(s)://服务器/s/<id> --token <token>` 的接入命令（来自网页后台空间页）——直接在 workspace 根目录执行它即可完成登录+绑定+首次同步。没有接入命令时，让用户去网页空间页点「生成我的接入命令」，或运行 `tn init <目标>` + `tn login`（git 远端地址也可作为目标）。
+**绑定流程（设备授权，你来主导）**：用户给你服务器地址（形如 `https://tn.example.com` 或带空间的 `…/s/3`）后：
+1. 没有 `tn` 命令时先 `curl -fsSL <服务器>/install.sh | bash`
+2. 在 workspace 根目录运行 `tn connect <服务器地址>`
+3. 把它输出的**授权链接原样发给用户**，请用户在浏览器打开（未注册会引导注册，页面上可选择/创建空间）
+4. 用户确认授权后运行 `tn connect --finish`；若提示等待中，稍后重试（链接 15 分钟有效）
+5. 成功后告知用户绑定到了哪个空间
+
+也兼容旧方式：`tn connect <服务器>/s/<id> --token <token>` 一条命令直连。服务器的 `/start` 路径有同样的接入说明（`curl <服务器>/start`）。
 
 CLI 是 `tn`（若未安装，用 `python3 <项目路径>/cli/tn.py` 等价调用）。
 
