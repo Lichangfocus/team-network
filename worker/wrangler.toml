@@ -11,7 +11,7 @@ routes = [
 [assets]
 directory = "./public"
 binding = "ASSETS"
-run_worker_first = ["/api/*", "/install.sh", "/install", "/start", "/s/*", "/join/*", "/link/*"]
+run_worker_first = ["/api/*", "/install.sh", "/install", "/start", "/bind", "/s/*", "/join/*", "/link/*"]
 
 # 部署前先: npx wrangler d1 create team-network，把返回的 database_id 填到这里
 [[d1_databases]]

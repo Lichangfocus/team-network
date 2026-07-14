@@ -92,7 +92,10 @@ document.addEventListener("click", async (ev) => {
 });
 
 function connectInstruction(origin, spaceId) {
-  return `帮我安装这个技能：${origin}/install${spaceId ? `?space=${spaceId}` : ""}`;
+  // 带空间 = 绑定语义（已装技能的人复用）；不带 = 新用户安装语义。两个入口同一套流程文档。
+  return spaceId
+    ? `帮我绑定这个团队共享空间：${origin}/bind?space=${spaceId}`
+    : `帮我安装这个技能：${origin}/install`;
 }
 
 // ---------- 页面 ----------

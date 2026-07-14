@@ -9,7 +9,7 @@ description: 团队共享上下文空间。当 workspace 存在 .team-network/co
 
 前置条件：workspace 根目录存在 `.team-network/config.json`。若不存在，本 skill 不生效。
 
-**绑定流程（设备授权，你来主导）**：用户通常只会给你一句「帮我安装这个技能：`<服务器>/install`」——curl 该 URL 即可拿到完整接入步骤（本节内容的服务端版本，`?space=<id>` 表示直达指定空间）。若用户直接给了服务器地址（形如 `https://tn.example.com` 或带空间的 `…/s/3`）：
+**绑定流程（设备授权，你来主导）**：用户通常只会给你一句「帮我安装这个技能：`<服务器>/install`」或「帮我绑定这个团队共享空间：`<服务器>/bind?space=<id>`」——curl 该 URL 即可拿到完整步骤（同一套流程文档，`?space=<id>` 表示直达指定空间；已安装过则跳过安装步骤直接 connect）。若用户直接给了服务器地址（形如 `https://tn.example.com` 或带空间的 `…/s/3`）：
 1. 没有 `tn` 命令时先 `curl -fsSL <服务器>/install.sh | bash`
 2. 在 workspace 根目录运行 `tn connect <服务器地址>`
 3. 把它输出的**授权链接原样发给用户**，请用户在浏览器打开（未注册会引导注册，页面上可选择/创建空间）
