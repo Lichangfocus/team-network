@@ -257,7 +257,13 @@ async function pageTeams() {
       <div class="err" id="t-err"></div>
     </div>`;
   $("#t-create").onclick = async () => {
-    try { const r = await API.post("/api/teams", { name: $("#t-name").value }); location.hash = `#/team/${r.id}`; }
+    try {
+      const r = await API.post("/api/teams", { name: $("#t-name").value });
+      // 直接带一个默认共享空间，落到空间页交付「接入指令」，闭环不断
+      const s = await API.post(`/api/teams/${r.id}/spaces`, { name: "shared-context" });
+      sessionStorage.setItem("tn_new_space", String(s.id));
+      location.hash = `#/space/${s.id}`;
+    }
     catch (e) { $("#t-err").textContent = e.message; }
   };
   $("#t-join").onclick = async () => {
@@ -280,7 +286,7 @@ async function pageTeam(tid) {
         <div class="list-item">
           <a href="#/space/${s.id}"><strong>${esc(s.name)}</strong></a>
           <span class="meta">${s.entities} 实体 · rev ${s.rev}</span>
-        </div>`).join("") || `<p class="meta">还没有空间。</p>`}
+        </div>`).join("") || `<p class="meta">还没有空间。创建一个后，会得到发给 agent 的接入指令。</p>`}
       <div class="row" style="margin-top:12px">
         <input id="s-name" placeholder="新空间名称"><button id="s-create">创建空间</button>
       </div>
@@ -299,7 +305,11 @@ async function pageTeam(tid) {
       <div id="inv-out" style="margin-top:8px"></div>
     </div>`;
   $("#s-create").onclick = async () => {
-    try { const r = await API.post(`/api/teams/${tid}/spaces`, { name: $("#s-name").value }); location.hash = `#/space/${r.id}`; }
+    try {
+      const r = await API.post(`/api/teams/${tid}/spaces`, { name: $("#s-name").value });
+      sessionStorage.setItem("tn_new_space", String(r.id));
+      location.hash = `#/space/${r.id}`;
+    }
     catch (e) { $("#s-err").textContent = e.message; }
   };
   $("#inv-create").onclick = async () => {
@@ -323,8 +333,17 @@ async function pageSpace(sid, entityName) {
   const ents = data.entities.filter((e) => !e.deleted)
     .map((e) => ({ ...e, fm: parseFrontmatter(e.content)[0] }))
     .sort((a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""));
+  const isNew = sessionStorage.getItem("tn_new_space") === String(sid);
+  if (isNew) sessionStorage.removeItem("tn_new_space");
   app.innerHTML = `
     <p><a href="#/team/${sp.team_id}">← ${esc(sp.team_name)}</a></p>
+    ${isNew ? `
+    <div class="card hero">
+      <h1>✓ 「${esc(sp.team_name)} / ${esc(sp.name)}」已就绪</h1>
+      <p class="sub"><strong>最后一步</strong>：把下面这句话发给你的 agent（在你想共享上下文的项目里说）——指令里带着这个空间的地址，agent 会完成绑定：</p>
+      ${agentMsgBlock("space-connect-hero", connectInstruction(location.origin, sid))}
+      <p class="meta">以后邀请同事：team 页「生成邀请」；同事或你自己的其他项目接入：本页下方随时可复制同款指令。</p>
+    </div>` : ""}
     <div class="card">
       <h1>${esc(sp.name)}</h1>
       <p class="sub">${ents.length} 实体 · rev ${sp.rev}</p>

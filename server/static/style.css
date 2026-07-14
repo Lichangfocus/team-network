@@ -64,3 +64,6 @@ pre, .cmd { background: var(--bg); border: 1px solid var(--line); border-radius:
 .agent-msg pre { margin: 0 0 8px; user-select: all; }
 .agent-msg { margin-top: 8px; }
 label.list-item { display: flex; gap: 10px; align-items: center; }
+
+/* 新建空间后的「最后一步」高亮卡片 */
+.card.hero { border: 2px solid var(--accent, #2563eb); }

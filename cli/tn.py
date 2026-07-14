@@ -31,6 +31,7 @@ import hashlib
 import json
 import os
 import re
+import ssl
 import subprocess
 import sys
 import urllib.error
@@ -164,8 +165,11 @@ def http(method, url, token=None, data=None):
     if token:
         req.add_header("Authorization", "Bearer " + token)
     payload = json.dumps(data).encode() if data is not None else None
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
     try:
-        with urllib.request.urlopen(req, payload, timeout=30) as r:
+        with urllib.request.urlopen(req, payload, timeout=30, context=ctx) as r:
             return r.status, json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         try:
