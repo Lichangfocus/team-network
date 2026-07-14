@@ -2,16 +2,16 @@ name = "team-network"
 main = "src/index.js"
 compatibility_date = "2026-01-01"
 
+# 自定义域名（zone lichangfocus.com 已在本 Cloudflare 账号且 active）
+routes = [
+  { pattern = "tn.lichangfocus.com", custom_domain = true }
+]
+
 # 静态资源（网页后台 + tn.py/SKILL.md 分发），先跑 build.sh 生成 public/
 [assets]
 directory = "./public"
 binding = "ASSETS"
 run_worker_first = ["/api/*", "/install.sh", "/start", "/s/*", "/join/*", "/link/*"]
-
-# 自定义域名（lichangfocus.com 加入本 Cloudflare 账号后取消注释重新 deploy 即生效）
-# routes = [
-#   { pattern = "tn.lichangfocus.com", custom_domain = true }
-# ]
 
 # 部署前先: npx wrangler d1 create team-network，把返回的 database_id 填到这里
 [[d1_databases]]

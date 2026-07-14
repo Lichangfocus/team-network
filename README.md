@@ -18,14 +18,14 @@ server/Dockerfile       # 容器部署（数据库在 /data volume）
 
 ## 使用（AI-native：用户只做两件事——把指令扔给 agent、在网页上点）
 
-服务是多租户中心托管的（官方实例：`https://team-network.lichangin.workers.dev`，将迁移到 `tn.lichangfocus.com`），用户永远不碰服务器、不碰终端、不碰 token。
+服务是多租户中心托管的（官方实例：`https://tn.lichangfocus.com`），用户永远不碰服务器、不碰终端、不碰 token。
 
 **新用户的全部操作 = 把这段话发给自己的 agent：**
 
 ```text
 请帮我接入团队共享上下文（team-network）：
-1. 如果没有 tn 命令，先运行: curl -fsSL https://team-network.lichangin.workers.dev/install.sh | bash
-2. 在我的项目目录运行: tn connect https://team-network.lichangin.workers.dev
+1. 如果没有 tn 命令，先运行: curl -fsSL https://tn.lichangfocus.com/install.sh | bash
+2. 在我的项目目录运行: tn connect https://tn.lichangfocus.com
 3. 把它输出的授权链接发给我，我在浏览器点击授权
 4. 我说完成后，运行 tn connect --finish 完成绑定，并告诉我结果
 ```
